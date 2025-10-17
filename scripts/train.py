@@ -81,7 +81,8 @@ if __name__ == "__main__":
     # -----------------------------------------------------------------------------
     # default config values designed to test run a 100M parameter model on DESI galaxy imagery
     # look at `config/astropt*.py` for a prod run example
-    out_dir = "logs/astropt0100M"
+    tokeniser= "affine"
+    out_dir = "logs/affine_1M"
     eval_interval = 1000
     log_interval = 100
     checkpoint_interval = 5000
@@ -95,16 +96,16 @@ if __name__ == "__main__":
     use_hf = True  # use the huggingface dataset version of our galz
     stream_hf_dataset = True  # stream the galaxies from huggingface
     # data
-    gradient_accumulation_steps = 5 * 8  # used to simulate larger batch sizes
-    batch_size = 16  # if gradient_accumulation_steps > 1, this is the micro-batch size
+    gradient_accumulation_steps = 5  # used to simulate larger batch sizes
+    batch_size = 32  # if gradient_accumulation_steps > 1, this is the micro-batch size
     spiral = True  # do we want to process the galaxy patches in spiral order?
     block_size = 1024
     image_size = 256
     num_workers = 32  # 64
     # astroPT model
-    n_layer = 12
-    n_head = 12
-    n_embd = 768
+    n_layer = 3     # 1M:3   5M:6   45M:12   default:12
+    n_head  = 4     # 1M:4   5M:8   45M:8    default:12
+    n_embd  = 100   # 1M:100 5M:256 45M:496  default:768
     n_chan = 3  # 3 imagery bands: r, i, z for jpeg, 1 imagery band for FITS
     dropout = 0.0  # for pretraining 0 is good, for finetuning try 0.1+
     # NB dropout is NOT implemented for flex attention
@@ -126,7 +127,7 @@ if __name__ == "__main__":
     # we follow the same schedule here as Chinchilla
     learning_rate = 6e-4  # max learning rate
     max_iters = (
-        30000  # total number of training iterations for one pass over our dataset
+        50000  # total number of training iterations for one pass over our dataset
     )
     weight_decay = 1e-1
     beta1 = 0.9
@@ -240,6 +241,9 @@ if __name__ == "__main__":
             split="train",
             streaming=(True if stream_hf_dataset else False),
         )
+        
+        tds_hf = tds_hf.shuffle()
+
         tds_hf = tds_hf.select_columns("image_crop").map(
             partial(process_galaxy_wrapper, func=tds.process_galaxy)
         )
@@ -250,6 +254,9 @@ if __name__ == "__main__":
             split="test",
             streaming=(True if stream_hf_dataset else False),
         )
+        
+        vds_hf = vds_hf.shuffle()
+
         vds_hf = vds_hf.select_columns("image_crop").map(
             partial(process_galaxy_wrapper, func=tds.process_galaxy)
         )
@@ -286,6 +293,7 @@ if __name__ == "__main__":
         dropout=dropout,
         modalities=modalities,
         attn_type=attn_type,
+        tokeniser=tokeniser,
     )
 
     if init_from == "scratch":
